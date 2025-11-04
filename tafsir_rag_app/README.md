@@ -1,16 +1,20 @@
-# 📖 Tafsir RAG - Quranic Interpretation Assistant
+# 📖 Islamic Sources RAG - AI-Powered Q&A System
 
-An intelligent question-answering system that uses **Retrieval Augmented Generation (RAG)** to provide accurate answers about the Quran based on authentic tafsir (interpretations) from Islamic scholars.
+An intelligent question-answering system that uses **Retrieval Augmented Generation (RAG)** to provide accurate answers about Islam based on:
+- **📚 Tafsir** (Quranic interpretation) from renowned Islamic scholars
+- **📗 Hadith** (Prophetic traditions) from authentic collections
 
 ## 🌟 Features
 
-- **🤖 AI-Powered Q&A**: Ask natural language questions about the Quran
-- **📚 Multiple Tafsir Sources**: Access interpretations from renowned scholars (Ibn Kathir, Al-Jalalayn, etc.)
-- **🔍 Semantic Search**: Find relevant verses and interpretations using vector similarity
-- **🎯 Intent Analysis**: Understands your question's context and intention
-- **📊 Source Citations**: Always provides Surah and Ayah references
+### Core Capabilities
+- **🤖 AI-Powered Q&A**: Ask natural language questions about Islam, Quran, and Hadith
+- **📚 Multiple Tafsir Sources**: 27+ editions from scholars like Ibn Kathir, Al-Jalalayn, Al-Qurtubi
+- **📗 Hadith Collections**: 89+ editions including Sahih Bukhari, Sahih Muslim, and more
+- **🔍 Semantic Search**: Find relevant content using vector similarity, not just keywords
+- **🎯 Multi-Source Synthesis**: Combines insights from both Tafsir and Hadith
+- **📊 Proper Citations**: Provides Surah/Ayah numbers and Hadith references
 - **💬 Interactive CLI**: Easy-to-use command-line interface
-- **🌐 Multiple Languages**: Support for Arabic, English, Urdu, Bengali, and more
+- **🌐 Multiple Languages**: Arabic, English, Urdu, Bengali, Indonesian, Turkish, French, Russian
 
 ## 🏗️ Architecture
 
@@ -20,11 +24,18 @@ User Question → Intent Analysis → Vector Search → Context Retrieval → LL
 
 ### Components:
 
-1. **Data Loader**: Loads tafsir JSON files from the API
+1. **Data Loaders**:
+   - Tafsir: Loads from local JSON files
+   - Hadith: Fetches from hadith-api CDN
 2. **Embeddings**: Converts text to vector representations
-3. **Vector Store**: ChromaDB for efficient semantic search
+3. **Vector Store**: ChromaDB storing both Tafsir and Hadith
 4. **RAG Pipeline**: Retrieves relevant context and generates answers
 5. **LLM Integration**: OpenAI GPT or Ollama for local inference
+
+### Data Sources:
+
+- **Tafsir**: 27 editions, 6 languages, 6000+ verses
+- **Hadith**: 89 editions, 10 collections (Bukhari, Muslim, etc.), 9 languages
 
 ## 🚀 Quick Start
 
@@ -32,7 +43,8 @@ User Question → Intent Analysis → Vector Search → Context Retrieval → LL
 
 - Python 3.9+
 - OpenAI API key (or Ollama for local LLM)
-- Tafsir data (from parent directory)
+- Internet connection (for Hadith data)
+- Tafsir data (optional, from parent directory)
 
 ### Installation
 
@@ -66,10 +78,11 @@ python app.py --build-index
 ```
 
 This will:
-- Load tafsir data from the default editions
-- Generate embeddings for ~6000+ verses
+- Load tafsir data from default editions (if available)
+- Fetch hadith from Sahih Bukhari & Muslim (via CDN)
+- Generate embeddings for all content
 - Store in local ChromaDB database
-- Takes ~5-10 minutes depending on your API rate limits
+- Takes ~15-30 minutes for first time (downloads + embedding)
 
 2. **Start asking questions**!
 ```bash
@@ -87,10 +100,12 @@ python app.py
 ```
 
 Then ask questions like:
-- "What does the Quran say about patience?"
-- "Explain the meaning of Al-Fatiha"
-- "What is the significance of Ayat al-Kursi?"
-- "Tell me about the story of Prophet Moses"
+- "What does the Quran say about patience?" (gets Tafsir)
+- "What did the Prophet say about kindness?" (gets Hadith)
+- "Explain the meaning of Al-Fatiha" (gets Tafsir)
+- "How should I perform wudu?" (gets Hadith)
+- "What is the importance of prayer?" (gets both Tafsir & Hadith)
+- "Tell me about the story of Prophet Moses" (gets both)
 
 ### Single Question
 
@@ -110,14 +125,29 @@ python app.py --search "patience" --top-k 5
 python app.py --list-editions
 ```
 
-### Build Index with Specific Editions
+### Build Index with Specific Sources
 
+**Tafsir + Hadith (custom editions):**
 ```bash
-python app.py --build-index --editions en-tafisr-ibn-kathir en-al-jalalayn ar-tafsir-ibn-kathir
+python app.py --build-index \
+  --tafsir-editions en-tafisr-ibn-kathir en-al-jalalayn \
+  --hadith-editions eng-bukhari eng-muslim eng-abudawud
 ```
 
-### Force Rebuild Index
+**Only Tafsir (no Hadith):**
+```bash
+python app.py --build-index --no-hadith \
+  --tafsir-editions en-tafisr-ibn-kathir
+```
 
+**Only Hadith (no Tafsir):**
+```bash
+python app.py --build-index \
+  --hadith-editions eng-bukhari eng-muslim
+# (Tafsir will be skipped if data path not found)
+```
+
+**Force Rebuild:**
 ```bash
 python app.py --build-index --force
 ```
@@ -152,22 +182,35 @@ To use Ollama:
 ### Data Configuration
 
 ```env
-# Path to tafsir data directory
+# Tafsir Data
 TAFSIR_DATA_PATH=../tafsir
-
-# Default editions to load (comma-separated)
 DEFAULT_EDITIONS=en-tafisr-ibn-kathir,en-al-jalalayn
 
-# Vector store location
-VECTOR_STORE_PATH=./chroma_db
+# Hadith Data
+ENABLE_HADITH=true
+DEFAULT_HADITH_EDITIONS=eng-bukhari,eng-muslim
+MAX_HADITHS_PER_EDITION=0  # 0 = load all, or set limit (e.g., 1000)
+HADITH_CACHE_DIR=./hadith_cache
 
-# Number of results to retrieve
-TOP_K_RESULTS=5
+# Vector Store
+VECTOR_STORE_PATH=./chroma_db
+COLLECTION_NAME=islamic_sources_collection
+
+# RAG Settings
+TOP_K_RESULTS=5  # Number of sources to retrieve per query
 ```
 
-## 📚 Available Tafsir Editions
+**Hadith Settings Explained:**
+- `ENABLE_HADITH=true`: Include hadith in searches
+- `DEFAULT_HADITH_EDITIONS`: Which collections to load (comma-separated)
+- `MAX_HADITHS_PER_EDITION=0`: Load all hadith (set to 1000-2000 for faster indexing)
+- `HADITH_CACHE_DIR`: Where to cache downloaded hadith data
 
-The application includes **27 tafsir editions** in multiple languages:
+## 📚 Available Sources
+
+### Tafsir Editions
+
+**27 tafsir editions** in multiple languages:
 
 ### English (8 editions)
 - `en-tafisr-ibn-kathir` - Tafsir Ibn Kathir (Abridged)
@@ -188,20 +231,50 @@ The application includes **27 tafsir editions** in multiple languages:
 - Russian (1 edition)
 - Kurdish (1 edition)
 
-Run `python app.py --list-editions` to see all available editions.
+### Hadith Collections
+
+**89 hadith editions** across **10 collections** in **9 languages**:
+
+#### Major Collections (The Six Books)
+- `eng-bukhari` - **Sahih al-Bukhari** (~7,500 hadith)
+- `eng-muslim` - **Sahih Muslim** (~7,500 hadith)
+- `eng-abudawud` - **Sunan Abu Dawud**
+- `eng-tirmidhi` - **Jami At-Tirmidhi**
+- `eng-ibnmajah` - **Sunan Ibn Majah**
+- `eng-nasai` - **Sunan an-Nasai**
+
+#### Additional Collections
+- `eng-malik` - Muwatta Malik
+- Forty Hadith an-Nawawi
+- Forty Hadith Qudsi
+- And more...
+
+#### Other Languages
+- Arabic: `ara-bukhari`, `ara-muslim`, etc. (with full diacritics)
+- Urdu: `urd-bukhari`, `urd-muslim`, etc. (RTL support)
+- Bengali, Indonesian, Turkish, Russian, French, Tamil
+
+**Run `python app.py --list-editions` to see all available editions.**
+
+**Note:** See [HADITH_INTEGRATION.md](HADITH_INTEGRATION.md) for detailed hadith documentation.
 
 ## 🧠 How RAG Works
 
 ### 1. **Indexing Phase** (Build Index)
 ```
-Tafsir Text → Chunking → Embeddings → Vector Store
+Tafsir Text (local) → Embeddings → Vector Store
+      +                                ↓
+Hadith Text (CDN)  → Embeddings → Same Vector Store
 ```
 
 ### 2. **Query Phase** (Ask Question)
 ```
-User Question → Embedding → Similarity Search → Top K Results → Context
-                                                                    ↓
-User Question + Context → LLM → Synthesized Answer + Citations
+User Question → Embedding → Similarity Search (Tafsir + Hadith) → Top K Results
+                                                                         ↓
+                           User Question + Context → LLM → Answer + Citations
+                                                              ↓
+                                         FROM TAFSIR: [Surah X, Ayah Y...]
+                                         FROM HADITH: [Bukhari 123, Muslim 456...]
 ```
 
 ### Why RAG?

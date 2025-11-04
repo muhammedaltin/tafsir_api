@@ -21,10 +21,11 @@ def print_banner():
     banner = """
 ╔═══════════════════════════════════════════════════════════════════╗
 ║                                                                   ║
-║          📖 TAFSIR RAG - Quranic Interpretation Assistant        ║
+║         📖 ISLAMIC SOURCES RAG - AI-Powered Q&A System           ║
 ║                                                                   ║
-║     Ask questions about the Quran and receive answers based      ║
-║          on authentic tafsir from Islamic scholars               ║
+║     Ask questions about Islam and receive answers based on:      ║
+║       • Tafsir (Quranic interpretation) from scholars            ║
+║       • Hadith (Prophetic traditions) from authentic sources     ║
 ║                                                                   ║
 ╚═══════════════════════════════════════════════════════════════════╝
 """
@@ -32,36 +33,68 @@ def print_banner():
 
 
 def list_editions():
-    """List available tafsir editions."""
-    loader = TafsirDataLoader(Config.TAFSIR_DATA_PATH)
-    editions = loader.get_available_editions()
+    """List available tafsir and hadith editions."""
+    # List Tafsir editions
+    if Config.TAFSIR_DATA_PATH.exists():
+        loader = TafsirDataLoader(Config.TAFSIR_DATA_PATH)
+        editions = loader.get_available_editions()
 
-    print("\n📚 Available Tafsir Editions:\n")
-    print(f"{'Slug':<30} {'Name':<40} {'Language':<15}")
+        print("\n📚 Available Tafsir Editions:\n")
+        print(f"{'Slug':<30} {'Name':<40} {'Language':<15}")
+        print("=" * 90)
+
+        for edition in editions:
+            print(f"{edition['slug']:<30} {edition['name']:<40} {edition['language']:<15}")
+
+        print(f"\n✅ Total: {len(editions)} tafsir editions available")
+    else:
+        print("\n⚠️  Tafsir data not available")
+
+    # List Hadith editions
+    from hadith_loader import HadithDataLoader
+    hadith_loader = HadithDataLoader()
+
+    print("\n\n📗 Available Hadith Collections:\n")
+    print(f"{'Slug':<30} {'Collection':<40} {'Language':<15}")
     print("=" * 90)
 
-    for edition in editions:
-        print(f"{edition['slug']:<30} {edition['name']:<40} {edition['language']:<15}")
+    # Show major collections
+    major_collections = [
+        ("eng-bukhari", "Sahih al-Bukhari", "English"),
+        ("eng-muslim", "Sahih Muslim", "English"),
+        ("eng-abudawud", "Sunan Abu Dawud", "English"),
+        ("eng-tirmidhi", "Jami At-Tirmidhi", "English"),
+        ("eng-ibnmajah", "Sunan Ibn Majah", "English"),
+        ("eng-nasai", "Sunan an-Nasai", "English"),
+        ("ara-bukhari", "صحيح البخاري", "Arabic"),
+        ("ara-muslim", "صحيح مسلم", "Arabic"),
+        ("urd-bukhari", "صحیح بخاری", "Urdu"),
+        ("urd-muslim", "صحیح مسلم", "Urdu"),
+    ]
 
-    print(f"\n✅ Total: {len(editions)} editions available")
+    for slug, name, lang in major_collections:
+        print(f"{slug:<30} {name:<40} {lang:<15}")
+
+    print(f"\n✅ 89 total hadith editions available (10 collections, multiple languages)")
+    print("   Tip: Use edition slug from above in --hadith-editions argument")
 
 
-def build_index(editions: list, force: bool):
+def build_index(tafsir_editions: list, hadith_editions: list, enable_hadith: bool, force: bool):
     """Build the vector store index.
 
     Args:
-        editions: List of edition slugs to index
+        tafsir_editions: List of tafsir edition slugs to index
+        hadith_editions: List of hadith edition slugs to index
+        enable_hadith: Whether to include hadith
         force: Force rebuild if index exists
     """
     print("\n🔨 Building Vector Store Index...\n")
 
-    if not editions:
-        editions = Config.DEFAULT_EDITIONS
-        print(f"📚 Using default editions: {', '.join(editions)}\n")
-
     try:
         vector_store = build_vector_store(
-            edition_slugs=editions,
+            tafsir_edition_slugs=tafsir_editions,
+            hadith_edition_slugs=hadith_editions,
+            enable_hadith=enable_hadith,
             force_rebuild=force
         )
 
@@ -71,6 +104,8 @@ def build_index(editions: list, force: bool):
 
     except Exception as e:
         print(f"\n❌ Error building vector store: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
@@ -115,7 +150,7 @@ def interactive_mode(rag_pipeline: TafsirRAGPipeline):
     Args:
         rag_pipeline: The RAG pipeline
     """
-    print("\n💬 Interactive Mode - Ask questions about the Quran")
+    print("\n💬 Interactive Mode - Ask questions about Islam (Quran & Hadith)")
     print("   Type 'quit' or 'exit' to stop\n")
 
     while True:
@@ -159,18 +194,21 @@ def single_query_mode(rag_pipeline: TafsirRAGPipeline, question: str):
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Tafsir RAG - Quranic Interpretation Assistant",
+        description="Islamic Sources RAG - AI-Powered Q&A from Tafsir & Hadith",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # List available tafsir editions
+  # List available editions (both Tafsir and Hadith)
   python app.py --list-editions
 
-  # Build vector store index with default editions
+  # Build vector store index with defaults (Tafsir + Hadith)
   python app.py --build-index
 
   # Build index with specific editions
-  python app.py --build-index --editions en-tafisr-ibn-kathir en-al-jalalayn
+  python app.py --build-index --tafsir-editions en-tafisr-ibn-kathir --hadith-editions eng-bukhari eng-muslim
+
+  # Build index with only Tafsir (no Hadith)
+  python app.py --build-index --no-hadith
 
   # Force rebuild index
   python app.py --build-index --force
@@ -179,17 +217,17 @@ Examples:
   python app.py --interactive
 
   # Ask a single question
-  python app.py --query "What does the Quran say about patience?"
+  python app.py --query "What does Islam say about patience?"
 
   # Simple search without LLM
-  python app.py --search "patience" --top-k 5
+  python app.py --search "charity" --top-k 5
         """
     )
 
     parser.add_argument(
         "--list-editions",
         action="store_true",
-        help="List all available tafsir editions"
+        help="List all available tafsir and hadith editions"
     )
 
     parser.add_argument(
@@ -199,9 +237,21 @@ Examples:
     )
 
     parser.add_argument(
-        "--editions",
+        "--tafsir-editions",
         nargs="+",
         help="Tafsir editions to use (space-separated slugs)"
+    )
+
+    parser.add_argument(
+        "--hadith-editions",
+        nargs="+",
+        help="Hadith editions to use (space-separated slugs)"
+    )
+
+    parser.add_argument(
+        "--no-hadith",
+        action="store_true",
+        help="Disable hadith sources (use only tafsir)"
     )
 
     parser.add_argument(
@@ -257,13 +307,22 @@ Examples:
         return
 
     if args.build_index:
-        build_index(args.editions, args.force)
+        build_index(
+            args.tafsir_editions,
+            args.hadith_editions,
+            not args.no_hadith,
+            args.force
+        )
         return
 
     # For other modes, we need the vector store
     try:
         print("🔄 Loading vector store...")
-        vector_store = build_vector_store(edition_slugs=args.editions)
+        vector_store = build_vector_store(
+            tafsir_edition_slugs=args.tafsir_editions,
+            hadith_edition_slugs=args.hadith_editions,
+            enable_hadith=not args.no_hadith if args.no_hadith else None
+        )
         print(f"✅ Vector store loaded ({vector_store.get_collection_count()} documents)\n")
     except Exception as e:
         print(f"\n❌ Error loading vector store: {e}")

@@ -1,7 +1,7 @@
 """Vector store management using ChromaDB."""
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 import chromadb
 from chromadb.config import Settings
 from langchain_chroma import Chroma
@@ -11,10 +11,11 @@ from tqdm import tqdm
 
 from config import Config
 from data_loader import TafsirDocument
+from hadith_loader import HadithDocument
 
 
 class TafsirVectorStore:
-    """Manages the vector store for tafsir documents."""
+    """Manages the vector store for Islamic sources (Tafsir and Hadith)."""
 
     def __init__(
         self,
@@ -69,22 +70,33 @@ class TafsirVectorStore:
             persist_directory=str(self.persist_directory),
         )
 
-    def add_documents(self, tafsir_docs: List[TafsirDocument], batch_size: int = 100):
-        """Add tafsir documents to the vector store.
+    def add_documents(
+        self,
+        docs: List[Union[TafsirDocument, HadithDocument]],
+        batch_size: int = 100
+    ):
+        """Add documents (Tafsir or Hadith) to the vector store.
 
         Args:
-            tafsir_docs: List of TafsirDocument objects
+            docs: List of TafsirDocument or HadithDocument objects
             batch_size: Number of documents to process at once
         """
-        if not tafsir_docs:
+        if not docs:
             print("⚠️  No documents to add")
             return
 
-        print(f"\n📝 Adding {len(tafsir_docs)} documents to vector store...")
+        # Determine source type
+        source_type = "documents"
+        if docs and isinstance(docs[0], TafsirDocument):
+            source_type = "tafsir documents"
+        elif docs and isinstance(docs[0], HadithDocument):
+            source_type = "hadith documents"
 
-        # Convert TafsirDocument to LangChain Document
+        print(f"\n📝 Adding {len(docs)} {source_type} to vector store...")
+
+        # Convert to LangChain Document
         langchain_docs = []
-        for doc in tafsir_docs:
+        for doc in docs:
             langchain_doc = Document(
                 page_content=doc.to_text(),
                 metadata=doc.metadata,
@@ -93,11 +105,11 @@ class TafsirVectorStore:
 
         # Add documents in batches
         total_docs = len(langchain_docs)
-        for i in tqdm(range(0, total_docs, batch_size), desc="Adding documents"):
+        for i in tqdm(range(0, total_docs, batch_size), desc=f"Adding {source_type}"):
             batch = langchain_docs[i:i + batch_size]
             self.vectorstore.add_documents(batch)
 
-        print(f"✅ Successfully added {len(tafsir_docs)} documents")
+        print(f"✅ Successfully added {len(docs)} {source_type}")
 
     def similarity_search(
         self,
@@ -183,19 +195,24 @@ class TafsirVectorStore:
 
 
 def build_vector_store(
-    edition_slugs: Optional[List[str]] = None,
+    tafsir_edition_slugs: Optional[List[str]] = None,
+    hadith_edition_slugs: Optional[List[str]] = None,
+    enable_hadith: Optional[bool] = None,
     force_rebuild: bool = False,
 ) -> TafsirVectorStore:
-    """Build or load the vector store.
+    """Build or load the vector store with Tafsir and/or Hadith sources.
 
     Args:
-        edition_slugs: List of edition slugs to load
+        tafsir_edition_slugs: List of tafsir edition slugs to load
+        hadith_edition_slugs: List of hadith edition slugs to load
+        enable_hadith: Whether to load hadith (defaults to Config.ENABLE_HADITH)
         force_rebuild: Force rebuild even if store exists
 
     Returns:
         TafsirVectorStore instance
     """
     from data_loader import TafsirDataLoader
+    from hadith_loader import HadithDataLoader
 
     vector_store = TafsirVectorStore()
 
@@ -211,18 +228,39 @@ def build_vector_store(
         vector_store.delete_collection()
         vector_store = TafsirVectorStore()  # Reinitialize
 
+    all_documents = []
+
     # Load tafsir data
-    loader = TafsirDataLoader(Config.TAFSIR_DATA_PATH)
-    editions = edition_slugs or Config.DEFAULT_EDITIONS
+    if Config.TAFSIR_DATA_PATH.exists():
+        tafsir_loader = TafsirDataLoader(Config.TAFSIR_DATA_PATH)
+        tafsir_editions = tafsir_edition_slugs or Config.DEFAULT_EDITIONS
 
-    print(f"\n📚 Loading editions: {', '.join(editions)}")
-    documents = loader.load_multiple_editions(editions)
+        print(f"\n📚 Loading Tafsir editions: {', '.join(tafsir_editions)}")
+        tafsir_documents = tafsir_loader.load_multiple_editions(tafsir_editions)
+        all_documents.extend(tafsir_documents)
+    else:
+        print("⚠️  Skipping Tafsir: data path not found")
 
-    if not documents:
-        raise ValueError("No documents loaded. Check your data path and editions.")
+    # Load hadith data (if enabled)
+    if enable_hadith if enable_hadith is not None else Config.ENABLE_HADITH:
+        hadith_loader = HadithDataLoader(Config.HADITH_CACHE_DIR)
+        hadith_editions = hadith_edition_slugs or Config.DEFAULT_HADITH_EDITIONS
 
-    # Add documents to vector store
-    vector_store.add_documents(documents)
+        print(f"\n📗 Loading Hadith editions: {', '.join(hadith_editions)}")
+        max_hadiths = Config.MAX_HADITHS_PER_EDITION if Config.MAX_HADITHS_PER_EDITION > 0 else None
+
+        hadith_documents = hadith_loader.load_multiple_editions(
+            hadith_editions,
+            max_hadiths_per_edition=max_hadiths
+        )
+        all_documents.extend(hadith_documents)
+
+    if not all_documents:
+        raise ValueError("No documents loaded. Check your data sources and configuration.")
+
+    # Add all documents to vector store
+    print(f"\n📊 Total documents to index: {len(all_documents)}")
+    vector_store.add_documents(all_documents)
 
     return vector_store
 

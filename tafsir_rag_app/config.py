@@ -31,9 +31,18 @@ class Config:
         "en-tafisr-ibn-kathir,en-al-jalalayn"
     ).split(",")
 
+    # Hadith Data
+    ENABLE_HADITH = os.getenv("ENABLE_HADITH", "true").lower() == "true"
+    DEFAULT_HADITH_EDITIONS = os.getenv(
+        "DEFAULT_HADITH_EDITIONS",
+        "eng-bukhari,eng-muslim"
+    ).split(",")
+    MAX_HADITHS_PER_EDITION = int(os.getenv("MAX_HADITHS_PER_EDITION", "0"))  # 0 = all
+    HADITH_CACHE_DIR = Path(os.getenv("HADITH_CACHE_DIR", "./hadith_cache"))
+
     # Vector Store
     VECTOR_STORE_PATH = Path(os.getenv("VECTOR_STORE_PATH", "./chroma_db"))
-    COLLECTION_NAME = os.getenv("COLLECTION_NAME", "tafsir_collection")
+    COLLECTION_NAME = os.getenv("COLLECTION_NAME", "islamic_sources_collection")
 
     # RAG Configuration
     TOP_K_RESULTS = int(os.getenv("TOP_K_RESULTS", "5"))
@@ -49,9 +58,9 @@ class Config:
             )
 
         if not cls.TAFSIR_DATA_PATH.exists():
-            raise ValueError(
-                f"Tafsir data path not found: {cls.TAFSIR_DATA_PATH}. "
-                "Please ensure the tafsir data is available."
+            print(
+                f"⚠️  Warning: Tafsir data path not found: {cls.TAFSIR_DATA_PATH}. "
+                "Tafsir sources will not be available."
             )
 
         return True

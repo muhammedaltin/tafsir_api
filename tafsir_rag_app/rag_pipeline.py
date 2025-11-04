@@ -50,23 +50,27 @@ class TafsirRAGPipeline:
     def _create_qa_chain(self):
         """Create the QA chain with custom prompt."""
 
-        prompt_template = """You are a knowledgeable Islamic scholar assistant specializing in Quranic tafsir (interpretation).
+        prompt_template = """You are a knowledgeable Islamic scholar assistant specializing in Quranic tafsir (interpretation) and Hadith studies.
 
-Your task is to answer questions about the Quran and its interpretation based on the tafsir excerpts provided below.
+Your task is to answer questions about Islam based on the authentic sources provided below, which may include:
+- Tafsir (Quranic interpretation) from renowned scholars
+- Hadith (Prophetic traditions) from authentic collections
 
-Context from Tafsir:
+Context from Islamic Sources:
 {context}
 
 Question: {question}
 
 Instructions:
 1. Analyze the user's question to understand their intention
-2. Use the tafsir excerpts provided in the context to formulate your answer
-3. Always cite the specific Surah and Ayah numbers when referencing verses
-4. If the tafsir mentions different scholarly opinions, present them fairly
-5. If the context doesn't contain relevant information, say so honestly
-6. Keep your answer clear, respectful, and informative
-7. Use proper Islamic terminology and maintain scholarly tone
+2. Use the sources provided in the context to formulate your answer
+3. When citing Quranic verses, always include Surah and Ayah numbers
+4. When citing Hadith, include the collection name and hadith number
+5. If the sources mention different scholarly opinions, present them fairly
+6. If the context doesn't contain relevant information, say so honestly
+7. Synthesize information from both Tafsir and Hadith when both are available
+8. Keep your answer clear, respectful, and informative
+9. Use proper Islamic terminology and maintain scholarly tone
 
 Answer:"""
 
@@ -125,24 +129,68 @@ Answer:"""
         output.append("📚 SOURCES")
         output.append("=" * 70)
 
-        for i, doc in enumerate(result["sources"], 1):
-            output.append(f"\n{i}. {doc.metadata['reference']}")
-            output.append(f"   📕 {doc.metadata['edition_name']}")
-            output.append(f"   ✍️  {doc.metadata['author']}")
+        # Separate sources by type
+        tafsir_sources = []
+        hadith_sources = []
 
-            # Show excerpt
-            content = doc.page_content
-            # Skip the metadata header in content
-            if '\n\n' in content:
-                excerpt = content.split('\n\n', 1)[1]
+        for doc in result["sources"]:
+            if doc.metadata.get("source_type") == "hadith":
+                hadith_sources.append(doc)
             else:
-                excerpt = content
+                tafsir_sources.append(doc)
 
-            # Limit excerpt length
-            if len(excerpt) > 300:
-                excerpt = excerpt[:300] + "..."
+        # Display Tafsir sources
+        if tafsir_sources:
+            output.append("\nFROM TAFSIR:")
+            for i, doc in enumerate(tafsir_sources, 1):
+                output.append(f"\n{i}. {doc.metadata['reference']}")
+                output.append(f"   📕 {doc.metadata.get('edition_name', 'Unknown')}")
+                output.append(f"   ✍️  {doc.metadata.get('author', 'Unknown')}")
 
-            output.append(f"   📄 {excerpt}")
+                # Show excerpt
+                content = doc.page_content
+                if '\n\n' in content:
+                    excerpt = content.split('\n\n', 1)[1]
+                else:
+                    excerpt = content
+
+                if len(excerpt) > 300:
+                    excerpt = excerpt[:300] + "..."
+
+                output.append(f"   📄 {excerpt}")
+
+        # Display Hadith sources
+        if hadith_sources:
+            output.append("\nFROM HADITH:")
+            for i, doc in enumerate(hadith_sources, 1):
+                output.append(f"\n{i}. {doc.metadata['reference']}")
+                output.append(f"   📗 {doc.metadata.get('collection', 'Unknown Collection')}")
+
+                section = doc.metadata.get('section', 'Unknown Section')
+                output.append(f"   📖 Section: {section}")
+
+                # Show grades if available
+                grades = doc.metadata.get('grades', [])
+                if grades:
+                    output.append(f"   🔍 Grade: {', '.join(grades)}")
+
+                # Show excerpt
+                content = doc.page_content
+                # Extract the hadith text (after the metadata lines)
+                lines = content.split('\n')
+                # Find where the actual hadith text starts (usually after empty line)
+                text_start = 0
+                for idx, line in enumerate(lines):
+                    if line.strip() == "" and idx < len(lines) - 1:
+                        text_start = idx + 1
+                        break
+
+                excerpt = '\n'.join(lines[text_start:]) if text_start < len(lines) else content
+
+                if len(excerpt) > 350:
+                    excerpt = excerpt[:350] + "..."
+
+                output.append(f"   📄 {excerpt}")
 
         output.append("\n" + "=" * 70)
         return "\n".join(output)
